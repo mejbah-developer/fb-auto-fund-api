@@ -1,45 +1,37 @@
-const express = require("express");
-const app = express();
-const PORT = process.env.PORT || 3000;
+import express from "express";
+import cors from "cors";
 
+const app = express();
+app.use(cors());
 app.use(express.json());
 
-let apiKeys = [
-  { key: "12345", expires: "2025-12-31", usageLimit: 100, used: 0 },
-  { key: "ABCDE", expires: "2025-12-31", usageLimit: 50, used: 0 }
-];
+// Example list of API keys with usage limits
+const keys = {
+  "demo-key-123": { usage_remaining: 10, expires_at: "2025-12-31" },
+  "premium-key-456": { usage_remaining: 50, expires_at: "2026-12-31" }
+};
 
-// Middleware to log requests
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  next();
-});
-
-// Validate API key
+// Endpoint to validate key
 app.post("/validate_key", (req, res) => {
   const { api_key } = req.body;
-  const keyObj = apiKeys.find(k => k.key === api_key);
-  if (!keyObj) return res.json({ valid: false, message: "Invalid key" });
-
+  if (!api_key || !keys[api_key]) {
+    return res.json({ valid: false });
+  }
+  const keyData = keys[api_key];
   const now = new Date();
-  if (new Date(keyObj.expires) < now) return res.json({ valid: false, message: "Key expired" });
+  if (new Date(keyData.expires_at) < now || keyData.usage_remaining <= 0) {
+    return res.json({ valid: false });
+  }
 
-  if (keyObj.used >= keyObj.usageLimit) return res.json({ valid: false, message: "Usage limit reached" });
+  // Decrease usage remaining
+  keyData.usage_remaining -= 1;
 
-  keyObj.used++;
-  return res.json({ valid: true, message: "Key valid", remaining: keyObj.usageLimit - keyObj.used });
+  res.json({
+    valid: true,
+    expires_at: keyData.expires_at,
+    usage_remaining: keyData.usage_remaining
+  });
 });
 
-// Admin panel to list keys
-app.get("/admin/keys", (req, res) => {
-  res.json(apiKeys);
-});
-
-// Add new key (for admin only, simple version)
-app.post("/admin/add_key", (req, res) => {
-  const { key, expires, usageLimit } = req.body;
-  apiKeys.push({ key, expires, usageLimit, used: 0 });
-  res.json({ success: true });
-});
-
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
